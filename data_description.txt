@@ -1,0 +1,19 @@
+The income data is in a csv file. It is mostly clean data, but when data moves between systems, things like whitespaces that need to be trimmed might appear in the data
+example : '<=50K' might become '  <=50K  '. Also, there may be nulls and empty cells. There are various common ways of solving such minor problems and it is good to make a habit of cleaning your data a little first.
+Also, please refer to the arguments used in the data loading code in the shared python notebook.
+Below are the basic descriptions of the columns in the data. Most of it is self explanatory.
+
+age: Age of the individual
+workclass: classification of the kind of employment
+fnlwgt: A score generated to capture some demography and socio-economic information. Don't worry about the interpretation of this score too much.
+education: Level of education attained by the individual
+education-num: Years of education
+marital-status: Marital classification of the individual
+occupation: Occupation of the individual
+relationship: Family information of the individual
+race: What race the individual belongs to
+sex: Sex categorization
+capital-gain: Consider it to be some amount of capital gained by the individual over some fixed time period of measurement 
+capital-loss: Consider it to be some amount of capital lost by the individual over some fixed time period of measurement
+hours-per-week: Weekly working hours of the individual
+native-country: Which country the individual is from 

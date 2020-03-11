@@ -1,0 +1,263 @@
+## microfinancenance network 
+## data from BANERJEE, CHANDRASEKHAR, DUFLO, JACKSON 2012
+
+## data on 8622 households
+hh <- read.csv("microfinance_households.csv", row.names="hh")
+#Converting the following nominal/string variables as factors
+hh$village <- factor(hh$village)
+hh$roof <- factor(hh$roof)
+hh$religion <- factor(hh$religion)
+hh$ownership <- factor(hh$ownership)
+
+#EDA
+
+library(dplyr)
+hh%>%group_by(hh$religion)%>%summarize(n())
+hh%>%group_by(hh$roof)%>%summarize(n())
+bed_room_dist <- hh%>%group_by(hh$beds,hh$rooms)%>%summarize(n())
+
+#View(bed_room_dist)
+hist(hh$beds)
+hist(hh$rooms)
+
+hh%>%group_by(hh$electricity,hh$leader)%>%summarize(n())
+hh%>%group_by(hh$ownership)%>%summarize(n())
+#Rooms are ordinal in nature, leaving them as it is
+hh%>%group_by(hh$rooms)%>%summarize(n())
+
+#Rooms and Beds are ordinal in nature, thus kept unchanged
+#Electricity and Ownership are binary(Y/N) in nature
+
+--#Network Analysis---------
+# to get degrees for each household
+## (see http://igraph.sourceforge.net/)
+library(igraph)
+edges <- read.table("microfinance_edges.txt", colClasses="character")
+## edges holds connections between the household ids
+hhnet <- graph.edgelist(as.matrix(edges))
+hhnet <- as.undirected(hhnet) # two-way connections.
+
+## igraph is all about plotting.  
+V(hhnet) ## our 8000+ household vertices
+## Each vertex (node) has some attributes, and we can add more.
+V(hhnet)$village <- as.character(hh[V(hhnet),'village'])
+## we'll color them by village membership
+vilcol <- rainbow(nlevels(hh$village))
+names(vilcol) <- levels(hh$village)
+V(hhnet)$color = vilcol[V(hhnet)$village]
+## drop HH labels from plot
+V(hhnet)$label=NA
+
+# Graph plots try to force distances proportional to connectivity
+# Imagine nodes connected by elastic bands that you are pulling apart
+# The graphs can take a very long time, but I've found
+# edge.curved=FALSE speeds things up a lot.  Not sure why.
+
+## we'll use induced.subgraph and plot a couple villages 
+village1 <- induced.subgraph(hhnet, v=which(V(hhnet)$village=="1"))
+village33 <- induced.subgraph(hhnet, v=which(V(hhnet)$village=="33"))
+
+# vertex.size=3 is small.  default is 15
+plot(village1, vertex.size=3, edge.curved=FALSE)
+plot(village33, vertex.size=3, edge.curved=FALSE)
+
+######  now, on to the HW
+V(hhnet)
+## match id's
+#match returns a vector of the positions of (first) matches of its first argument in its second.
+#getting the position
+matches <- match(rownames(hh), V(hhnet)$name)
+View(matches)
+matches_2 <- rownames(hh) %in% V(hhnet)$name
+## calculate the 'degree' of each hh: 
+##number of commerce/friend/family connections i.e. the number of its adjacent edges
+degree <- degree(hhnet)[matches]
+names(degree) <- rownames(hh)
+degree[is.na(degree)] <- 0 # unconnected houses, not in our graph
+
+#--------------------------------------------------------------------------
+## Question 1
+#1. I'd transform degree to create our treatment variable d. What would you do and why?
+
+boxplot(degree~hh$loan)
+boxplot(degree~hh$village)
+
+#Distribution of degree
+hist(degree)
+head(hh)
+#Transformations to adjust for the skewness
+#Square Root Transformation
+deg_sqrt <- sqrt(degree)
+hist(deg_sqrt)
+
+#Log Transformation
+deg_log <- log(1+degree)
+hist(deg_log)
+
+## Question 2
+# 2. Build a model to predict d from x, our controls. Please interact all controls with one another (~.^2). Use lasso + CV.
+#    Comment on how tight the fit is, and what that implies for estimation of a treatment effect.
+
+# First step: using formula for all interactions
+f <- as.formula( ~ .^2)
+#Dependant Variable, treatment d
+#going with log transform as it reduces skewness and also more comprehensible to interpret
+y <- deg_log
+
+# Second step: using model.matrix to take advantage of f
+# By default glmnet fits intercept, so you'd better strip intercept from model matrix.
+x <- hh[,-c(1)]
+x <- model.matrix(f, x)[,-1]
+library(glmnet)
+#Lasso With CV
+#alpha=1 runs lasso regression (default value)
+fit.lasso.cv <- cv.glmnet(x,y,alpha=1)
+#Plotting Results
+plot(fit.lasso.cv, xvar="lambda")
+plot(fit.lasso.cv$glmnet.fit)
+fit.lasso.cv$lambda.1se
+
+#Model Results
+#Print Lasso results
+print.cv.glmnet(fit.lasso.cv)
+#Print coefficient matrix
+#lambda such that error is within 1 standard error of the minimum
+coef(fit.lasso.cv,fit.lasso.cv$lambda.1se)
+
+#In-sample R-squared
+r2 <- fit.lasso.cv$glmnet.fit$dev.ratio[which(fit.lasso.cv$glmnet.fit$lambda == fit.lasso.cv$lambda.1se)]
+0.06018806
+#r-squared when lambda.min is taken
+r2_min <- fit.lasso.cv$glmnet.fit$dev.ratio[which(fit.lasso.cv$glmnet.fit$lambda == fit.lasso.cv$lambda.min)]
+
+
+#keeping in view the low value of r-squared , it can be concluded that treatment i.e. degrees is quite independant of the 
+#x-variables. They aren't very strongly correlated
+
+## Question 3
+# Use predictions from [2] in an estimator for effect of d on loan.
+
+#Predicting treatment-hat (degrees in our case from our lasso regression 1)
+d_hat <- predict(fit.lasso.cv,x,s="lambda.1se")
+
+plot(d_hat,deg_log)
+
+
+#Regression 2: 
+y=hh$loan
+# a lasso of loan on deg_sqrt,d_hat and x
+#making sure not to penalize the predicted d_hat
+fit.lasso2 <- cv.glmnet(cbind(deg_log,d_hat,x),y,family="binomial",
+                        penalty.factor=c(1,0, rep(1, ncol(x))),alpha=1)
+
+#Plotting Results
+plot(fit.lasso2, xvar="lambda")
+plot(fit.lasso2$glmnet.fit)
+fit.lasso2$lambda.1se
+
+#Model Results
+#Print Lasso results
+print.cv.glmnet(fit.lasso2)
+
+#Measure: Binomial Deviance 
+
+#Lambda Measure      SE Nonzero
+#min 0.004271  0.7932 0.01102     141
+#1se 0.009868  0.8019 0.01051      43
+
+#Print coefficient matrix
+#lambda such that error is within 1 standard error of the minimum
+coef(fit.lasso2,fit.lasso2$lambda.1se)
+
+#number of non-zero variables
+fit.lasso2$nzero[which(fit.lasso2$lambda==fit.lasso2$lambda.1se)]
+43 
+
+#In-sample R-squared
+r2 <- fit.lasso2$glmnet.fit$dev.ratio[which(fit.lasso2$glmnet.fit$lambda == fit.lasso2$lambda.1se)]
+0.04572387
+r2 <- fit.lasso2$glmnet.fit$dev.ratio[which(fit.lasso2$glmnet.fit$lambda == fit.lasso2$lambda.min)]
+coef(fit.lasso2)['deg_log',]
+0.06090202
+
+## Question 4
+# Compare the results from [3] to those from a naive lasso (no CV) for loan on d and x. 
+# Explain why they are similar or different.
+
+#Naive Lasso Regression
+fit.lasso <- glmnet(cbind(x,deg_log),y,family="binomial",alpha=1)
+
+#plots for comparison
+par(mfrow=c(1,1))
+plot(fit.lasso, xvar="lambda")  #Naive CV
+plot(fit.lasso2, xvar="lambda") #CV Lasso
+
+plot(fit.lasso$dev.ratio,fit.lasso$lambda,type='o')
+
+
+#compute AICc for all lambdas obtained in naive Lasso
+tLL <- fit.lasso$dev.ratio - deviance(fit.lasso)
+k <- fit.lasso$df
+n <- fit.lasso$nobs
+AICc <- -tLL+2*k+2*k*(k+1)/(n-k-1)
+AICc
+min(AICc)
+
+AIC_lambda <- data.frame(cbind(fit.lasso$lambda,AICc))
+colnames(AIC_lambda) <- c('lambda','AICc')
+plot(AIC_lambda)
+AIC_lambda[which.min(AIC_lambda$AICc),]
+#lambda     AICc
+#22 0.003951105 6837.328
+
+#corresponding number of non-zero coefficients
+fit.lasso$df[22]
+150
+
+coef(fit.lasso)['deg_log',which.min(AIC_lambda$AICc)]
+0.1306999
+
+## Question 5
+# Bootstrap your double TE estimator from [3] and describe the uncertainty.
+# Bootstrap 95% CI for regression coefficient for network degree
+
+y <- deg_log
+x <- hh[,-c(1)]
+x <- model.matrix(f, x)[,-1]
+coef_d <- {}
+n <- nrow(hh)
+
+for(i in 1: 100) {
+  samp <- sample(1:n, n, replace = TRUE)
+  xvars = cbind(d_hat, deg_log, x)[samp,]
+  yvars=hh$loan[samp]
+  colnames(xvars)[c(1,2)] = c("d_pred", "deg_log")
+  fit_cv = cv.glmnet(xvars,
+                     yvars, family='binomial', standardize=TRUE, 
+                     penalty.factor=c(1,0, rep(1, ncol(x))))
+  coef_d <- c(coef_d,coef(fit_cv)['deg_log',])
+  print(i)
+}
+
+hist(coef_d)
+summary(coef_d)
+coef_d <- sort(coef_d)
+#lower bound for 95% CI is the 2.5th quantile:
+quantile(coef_d,.025)
+#lower bound for 95% CI is the 97.5th quantile:
+quantile(coef_d,.975)
+
+#Bootstrap Alternative using boot
+library(boot)
+coef_stat <- function(d_hat,treat,xmat, indices) {
+  xvars = cbind(d_hat, treat, xmat)[indices,]
+  yvars=hh$loan[indices]
+  colnames(xvars)[c(1,2)] = c("d_pred", "deg_log")
+  fit_cv = cv.glmnet(xvars,
+                     yvars, family='binomial', standardize=TRUE, 
+                     penalty.factor=c(1,0, rep(1, ncol(xmat))))
+  return(coef(fit_cv)['deg_log',])
+} 
+
+# Then carry out the resampling
+b <- boot(data=d_hat,treat=deg_log,xmat=x, coef_stat, R=1000, parallel="multicore")
