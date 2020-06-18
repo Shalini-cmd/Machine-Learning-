@@ -61,7 +61,7 @@ village33 <- induced.subgraph(hhnet, v=which(V(hhnet)$village=="33"))
 plot(village1, vertex.size=3, edge.curved=FALSE)
 plot(village33, vertex.size=3, edge.curved=FALSE)
 
-######  now, on to the HW
+###### 
 V(hhnet)
 ## match id's
 #match returns a vector of the positions of (first) matches of its first argument in its second.
@@ -76,8 +76,7 @@ names(degree) <- rownames(hh)
 degree[is.na(degree)] <- 0 # unconnected houses, not in our graph
 
 #--------------------------------------------------------------------------
-## Question 1
-#1. I'd transform degree to create our treatment variable d. What would you do and why?
+## Transform degree to create our treatment variable d
 
 boxplot(degree~hh$loan)
 boxplot(degree~hh$village)
