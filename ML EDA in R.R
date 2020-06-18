@@ -1,6 +1,5 @@
 #Machine Learning Homework 1 (EDA Code)
-#Section-2
-#Members: Vardhini Manivannan, Shalini Mishra, Prakriti Rastogi, Shivani Verma
+#Exploratiom of Ice cream Dataset
 #--------------------------------------------------------------------------------
 install.packages('dplyr')
 library(dplyr)
