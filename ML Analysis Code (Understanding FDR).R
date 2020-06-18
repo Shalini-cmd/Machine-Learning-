@@ -1,6 +1,6 @@
 #Machine Learning Homework 1(Analysis Code)
-#Section-2
-#Members: Vardhini Manivannan, Shalini Mishra, Prakriti Rastogi, Shivani Verma
+#Part 2(Analysis)
+#How many true discoveries do we have? FDR control
 #------------------------------------------------------------------------------
 
 
